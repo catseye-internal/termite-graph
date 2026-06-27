@@ -222,7 +222,14 @@
       <button class="btn primary" id="expPhoto" style="width:100%; padding:12px;">📷 Save Image to Camera Roll</button>
       <button class="btn blue" id="expPdf" style="width:100%; padding:12px;">📄 Save PDF to Files</button>
       <button class="btn" id="expEmail" style="width:100%; padding:12px;">✉️ Email PDF</button>
-      <button class="btn ghost" id="expClose" style="width:100%;">Cancel</button>
+      <div style="display:flex; align-items:center; gap:8px; margin:6px 0 2px;">
+        <div style="flex:1; height:1px; background:var(--line);"></div>
+        <span style="font-size:11px; color:var(--muted);">DIRECT DOWNLOAD</span>
+        <div style="flex:1; height:1px; background:var(--line);"></div>
+      </div>
+      <button class="btn" id="expDownloadPdf" style="width:100%; padding:12px;">⬇️ Download PDF</button>
+      <button class="btn" id="expDownloadPng" style="width:100%; padding:12px;">⬇️ Download Image (PNG)</button>
+      <button class="btn ghost" id="expClose" style="width:100%; margin-top:4px;">Cancel</button>
     </div>
   </div>
 </div>
@@ -826,39 +833,58 @@ function fileBase(){
   const d=F('f_date')||new Date().toISOString().slice(0,10);
   return `TermiteGraph_${a}_${d}`;
 }
-function canvasToBlob(canvas,type,q){ return new Promise(res=>canvas.toBlob(res,type,q)); }
+/* Build files SYNCHRONOUSLY so the click's user-gesture stays valid for navigator.share */
+function dataURLToBlob(durl){
+  const c=durl.indexOf(','); const mime=(durl.slice(0,c).match(/:(.*?);/)||[])[1]||'application/octet-stream';
+  const bin=atob(durl.slice(c+1)); const n=bin.length; const u8=new Uint8Array(n);
+  for(let i=0;i<n;i++) u8[i]=bin.charCodeAt(i);
+  return new Blob([u8],{type:mime});
+}
+function makePngFile(){ const out=buildExportCanvas(); return new File([dataURLToBlob(out.toDataURL('image/png'))], fileBase()+'.png', {type:'image/png'}); }
+function makePdfFile(){ const out=buildExportCanvas(); return new File([jpegToPdf(out.toDataURL('image/jpeg',0.92), out.width, out.height)], fileBase()+'.pdf', {type:'application/pdf'}); }
 
-async function exportPhoto(){
+/* Only use the native share sheet on real touch devices (iPad/iPhone). Desktop = direct download. */
+const isTouchDevice = ((navigator.maxTouchPoints||0)>0) || (window.matchMedia && matchMedia('(pointer:coarse)').matches);
+function canShareFile(file){ try{ return isTouchDevice && navigator.canShare && navigator.canShare({files:[file]}); }catch(e){ return false; } }
+
+function saveImage(){
   exportModal.classList.remove('show');
-  const out=buildExportCanvas();
-  const blob=await canvasToBlob(out,'image/png');
-  const file=new File([blob],fileBase()+'.png',{type:'image/png'});
-  if(navigator.canShare && navigator.canShare({files:[file]})){
-    try{ await navigator.share({files:[file], title:'Termite Graph'}); toast('Shared — choose “Save Image”.'); return; }catch(e){ if(e.name==='AbortError') return; }
-  }
-  downloadBlob(blob, file.name); toast('Image downloaded.');
+  const file=makePngFile();
+  if(canShareFile(file)){
+    navigator.share({files:[file], title:'Termite Graph'}).then(()=>toast('Choose “Save Image” to add it to your camera roll.'))
+      .catch(e=>{ if(e.name!=='AbortError'){ downloadBlob(file,file.name); toast('Image downloaded.'); } });
+  } else { downloadBlob(file,file.name); toast('Image saved to your Downloads folder.'); }
 }
-async function exportPDF(forEmail){
+function savePdf(){
   exportModal.classList.remove('show');
-  const out=buildExportCanvas();
-  const jpeg=out.toDataURL('image/jpeg',0.92);
-  const pdfBlob=jpegToPdf(jpeg, out.width, out.height);
-  const file=new File([pdfBlob],fileBase()+'.pdf',{type:'application/pdf'});
-  if(navigator.canShare && navigator.canShare({files:[file]})){
-    try{ await navigator.share({files:[file], title:'Termite Graph'+(forEmail?' (Email)':'')}); toast(forEmail?'Choose Mail to email the PDF.':'Choose “Save to Files”.'); return; }catch(e){ if(e.name==='AbortError') return; }
-  }
-  // fallback
-  downloadBlob(pdfBlob, file.name);
-  if(forEmail){
-    const subj=encodeURIComponent('Termite Graph — '+(F('f_address')||F('f_lastname')||''));
-    const body=encodeURIComponent('Termite graph attached.\n\nCompany: '+F('f_company')+'\nInspector: '+F('f_inspector')+'\nDate: '+F('f_date')+'\nAddress: '+F('f_address')+'\n\n(The PDF was downloaded — please attach it to this email.)');
-    setTimeout(()=>{ window.location.href=`mailto:?subject=${subj}&body=${body}`; }, 400);
+  const file=makePdfFile();
+  if(canShareFile(file)){
+    navigator.share({files:[file], title:'Termite Graph'}).then(()=>toast('Choose “Save to Files”.'))
+      .catch(e=>{ if(e.name!=='AbortError'){ downloadBlob(file,file.name); toast('PDF downloaded.'); } });
+  } else { downloadBlob(file,file.name); toast('PDF saved to your Downloads folder.'); }
+}
+function emailPdf(){
+  exportModal.classList.remove('show');
+  const file=makePdfFile();
+  const subj=encodeURIComponent('Termite Graph — '+(F('f_address')||F('f_lastname')||''));
+  const mailBody='Termite graph attached.\n\nCompany: '+F('f_company')+'\nInspector: '+F('f_inspector')+'\nDate: '+F('f_date')+'\nAddress: '+F('f_address');
+  if(canShareFile(file)){
+    navigator.share({files:[file], title:'Termite Graph'}).then(()=>toast('Choose Mail to send the PDF.'))
+      .catch(e=>{ if(e.name!=='AbortError'){ downloadBlob(file,file.name); setTimeout(()=>location.href='mailto:?subject='+subj+'&body='+encodeURIComponent(mailBody),400); toast('PDF downloaded — attach it to the email.'); } });
+  } else {
+    downloadBlob(file,file.name);
+    setTimeout(()=>location.href='mailto:?subject='+subj+'&body='+encodeURIComponent(mailBody+'\n\n(The PDF was downloaded to your computer — please attach it to this email.)'),500);
     toast('PDF downloaded — attach it to the email draft.');
-  } else toast('PDF downloaded.');
+  }
 }
-document.getElementById('expPhoto').onclick=exportPhoto;
-document.getElementById('expPdf').onclick=()=>exportPDF(false);
-document.getElementById('expEmail').onclick=()=>exportPDF(true);
+function downloadPdf(){ exportModal.classList.remove('show'); const f=makePdfFile(); downloadBlob(f,f.name); toast('PDF downloaded.'); }
+function downloadPng(){ exportModal.classList.remove('show'); const f=makePngFile(); downloadBlob(f,f.name); toast('Image (PNG) downloaded.'); }
+
+document.getElementById('expPhoto').onclick=saveImage;
+document.getElementById('expPdf').onclick=savePdf;
+document.getElementById('expEmail').onclick=emailPdf;
+document.getElementById('expDownloadPdf').onclick=downloadPdf;
+document.getElementById('expDownloadPng').onclick=downloadPng;
 
 function downloadBlob(blob,name){ const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }
 
