@@ -53,6 +53,7 @@
 
   /* right info panel */
   .info{width:330px; flex:none; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:12px;}
+  .info-mobilebar{display:none;}
   .info h3{margin:2px 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.7px; color:var(--accent);}
   .fld{margin-bottom:9px; min-width:0;}
   .fld label{display:block; font-size:11px; color:var(--muted); margin-bottom:3px; font-weight:600;}
@@ -111,10 +112,16 @@
     padding:10px 16px; border-radius:10px; font-size:13px; z-index:200; opacity:0; transition:opacity .25s; pointer-events:none;}
   .toast.show{opacity:1;}
 
-  /* Responsive: phones / narrow */
+  /* Responsive: phones / narrow tablets — details become a full-screen panel */
   @media (max-width: 900px){
-    .info{position:absolute; right:0; top:0; bottom:0; z-index:60; transform:translateX(100%); transition:transform .2s; box-shadow:-10px 0 30px #0008;}
+    .info{position:fixed; inset:0; width:auto; z-index:120; padding:12px;
+      transform:translateX(100%); transition:transform .22s ease; box-shadow:none; border-left:none;}
     .info.open{transform:translateX(0);}
+    .info-mobilebar{display:flex; align-items:center; justify-content:space-between; gap:12px;
+      position:sticky; top:0; margin:-12px -12px 10px -12px; padding:12px; background:var(--panel);
+      border-bottom:1px solid var(--line); z-index:2;}
+    .info-mobilebar strong{font-size:16px; color:var(--accent); letter-spacing:.5px;}
+    .info > h3:first-of-type{display:none;}
     .mobtn{display:inline-flex;}
     header .title{font-size:14px;}
   }
@@ -181,13 +188,12 @@
 
   <!-- Info / form panel -->
   <div class="info" id="info">
+    <div class="info-mobilebar"><strong>Inspection Details</strong><button class="btn primary" id="infoClose">Done</button></div>
     <h3>Inspection Details</h3>
     <div class="fld"><label>Pest Control Company <span class="req">*</span></label><input id="f_company" data-req placeholder="Pest control company name"></div>
     <div class="fld"><label>Inspector <span class="req">*</span></label><input id="f_inspector" data-req placeholder="Inspector name"></div>
-    <div class="row2">
-      <div class="fld"><label>Date <span class="req">*</span></label><input id="f_date" data-req type="date"></div>
-      <div class="fld"><label>Account # <span class="req">*</span></label><input id="f_account" data-req placeholder="Acct"></div>
-    </div>
+    <div class="fld"><label>Date <span class="req">*</span></label><input id="f_date" data-req type="date"></div>
+    <div class="fld"><label>Account # <span class="req">*</span></label><input id="f_account" data-req placeholder="Acct #"></div>
     <div class="fld"><label>Customer <span class="req">*</span></label><input id="f_lastname" data-req placeholder="Customer name"></div>
     <div class="fld"><label>Property Address <span class="req">*</span></label><input id="f_address" data-req placeholder="Street, City, State"></div>
     <div class="row2">
@@ -684,6 +690,7 @@ document.getElementById('f_date').value = new Date().toISOString().slice(0,10);
 
 /* mobile info toggle */
 document.getElementById('infoToggle').onclick=()=>document.getElementById('info').classList.toggle('open');
+document.getElementById('infoClose').onclick=()=>document.getElementById('info').classList.remove('open');
 
 /* ================= Export ================= */
 const F = id=>document.getElementById(id).value.trim();
