@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Termite Graph</title>
+<style>
+  :root{
+    --bg:#1f2329; --panel:#2b3038; --panel2:#343a44; --line:#3d4450;
+    --ink:#e9edf2; --muted:#9aa4b2; --accent:#f47b20; --accent2:#2f6fed;
+    --danger:#e5484d; --ok:#2fae6b; --field:#fff; --fieldink:#15181d;
+    --gridline:#c9d4e0; --gridmajor:#6f7d8c; --paper:#ffffff;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    overscroll-behavior:none;}
+  body{display:flex; flex-direction:column; height:100dvh; overflow:hidden;}
+
+  /* ---------- Top bar ---------- */
+  header{display:flex; align-items:center; gap:10px; padding:8px 12px;
+    background:linear-gradient(90deg,#15181d, #232830); border-bottom:1px solid var(--line);}
+  header .title{font-weight:800; letter-spacing:.5px; font-size:16px; color:#fff; white-space:nowrap;}
+  header .title b{color:var(--accent);}
+  header .spacer{flex:1;}
+  .btn{appearance:none; border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+    padding:8px 12px; border-radius:9px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap;}
+  .btn:hover{background:#3c434f;}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#1a1206;}
+  .btn.blue{background:var(--accent2); border-color:var(--accent2); color:#fff;}
+  .btn.ghost{background:transparent;}
+  .btn:active{transform:translateY(1px);}
+
+  /* ---------- Layout ---------- */
+  .main{flex:1; display:flex; min-height:0;}
+  .toolrail{width:64px; background:var(--panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px 0; overflow-y:auto;}
+  .tool{width:48px; height:48px; border-radius:11px; border:1px solid transparent; background:var(--panel2);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; color:var(--ink);}
+  .tool svg{width:22px; height:22px;}
+  .tool small{font-size:8px; line-height:1; color:var(--muted);}
+  .tool.active{background:var(--accent); color:#1a1206; border-color:#ffae6b;}
+  .tool.active small{color:#5a3a12;}
+  .tool.disabled{opacity:.4; pointer-events:none;}
+
+  .stage{flex:1; position:relative; background:#11141a; min-width:0; display:flex; flex-direction:column;}
+  .canvas-wrap{flex:1; overflow:auto; position:relative; -webkit-overflow-scrolling:touch;
+    padding:14px; text-align:center;}
+  #grid{display:inline-block; background:var(--paper); box-shadow:0 6px 30px rgba(0,0,0,.5);
+    touch-action:none; border-radius:2px;}
+
+  /* right info panel */
+  .info{width:300px; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:12px;}
+  .info h3{margin:2px 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.7px; color:var(--accent);}
+  .fld{margin-bottom:9px;}
+  .fld label{display:block; font-size:11px; color:var(--muted); margin-bottom:3px; font-weight:600;}
+  .fld label .req{color:var(--danger);}
+  .fld input,.fld select{width:100%; padding:8px 9px; border-radius:8px; border:1px solid var(--line);
+    background:var(--field); color:var(--fieldink); font-size:13px; font-weight:600;}
+  .fld input.missing{border-color:var(--danger); box-shadow:0 0 0 2px rgba(229,72,77,.25);}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .chips{display:flex; flex-wrap:wrap; gap:6px;}
+  .chip{font-size:11px; padding:6px 9px; border-radius:20px; border:1px solid var(--line);
+    background:var(--panel2); color:var(--ink); cursor:pointer; user-select:none;}
+  .chip.on{background:var(--accent2); border-color:var(--accent2); color:#fff;}
+  .divider{height:1px; background:var(--line); margin:12px 0;}
+
+  /* options bar under header */
+  .optbar{display:flex; align-items:center; gap:12px; padding:7px 12px; background:var(--panel2);
+    border-bottom:1px solid var(--line); flex-wrap:wrap;}
+  .optbar .grp{display:flex; align-items:center; gap:7px;}
+  .optbar label{font-size:11px; color:var(--muted); font-weight:600;}
+  .swatches{display:flex; gap:5px;}
+  .sw{width:24px; height:24px; border-radius:6px; border:2px solid #00000033; cursor:pointer;}
+  .sw.sel{outline:3px solid #ffffff; outline-offset:1px;}
+  input[type=range]{width:120px;}
+  .toggle{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); cursor:pointer;}
+  .seg{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden;}
+  .seg button{background:var(--panel); color:var(--ink); border:none; padding:6px 10px; font-size:12px; cursor:pointer;}
+  .seg button.on{background:var(--accent); color:#1a1206; font-weight:700;}
+
+  /* stamp palette popover */
+  .stamp-pop{position:absolute; left:8px; top:8px; width:230px; max-height:78%; overflow-y:auto;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px; z-index:40;
+    box-shadow:0 14px 40px rgba(0,0,0,.5); display:none;}
+  .stamp-pop.show{display:block;}
+  .stamp-pop .cat{font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--accent); margin:8px 2px 5px;}
+  .stamp-grid{display:grid; grid-template-columns:1fr 1fr; gap:6px;}
+  .stamp-btn{display:flex; align-items:center; gap:7px; background:var(--panel2); border:1px solid var(--line);
+    border-radius:8px; padding:6px; cursor:pointer; font-size:10px; color:var(--ink);}
+  .stamp-btn.sel{border-color:var(--accent); background:#3a2a18;}
+  .stamp-ico{width:24px; height:24px; flex:none;}
+
+  /* modal */
+  .modal-bg{position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:100;}
+  .modal-bg.show{display:flex;}
+  .modal{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; width:min(460px,92vw); max-height:88vh; overflow:auto;}
+  .modal h2{margin:0 0 6px; font-size:17px;}
+  .modal p{color:var(--muted); font-size:13px; margin:0 0 14px;}
+  .modal .acts{display:flex; gap:8px; justify-content:flex-end; margin-top:16px; flex-wrap:wrap;}
+  .miss-list{color:var(--danger); font-size:13px; margin:8px 0 0; padding-left:18px;}
+
+  .mobtn{display:none;}
+  .toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#000c; color:#fff;
+    padding:10px 16px; border-radius:10px; font-size:13px; z-index:200; opacity:0; transition:opacity .25s; pointer-events:none;}
+  .toast.show{opacity:1;}
+
+  /* Responsive: phones / narrow */
+  @media (max-width: 900px){
+    .info{position:absolute; right:0; top:0; bottom:0; z-index:60; transform:translateX(100%); transition:transform .2s; box-shadow:-10px 0 30px #0008;}
+    .info.open{transform:translateX(0);}
+    .mobtn{display:inline-flex;}
+    header .title{font-size:14px;}
+  }
+  @media (max-width: 560px){
+    .toolrail{width:54px;}
+    .tool{width:42px; height:42px;}
+    .optbar{gap:8px;}
+    input[type=range]{width:84px;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="title">TERMITE&nbsp;<b>GRAPH</b></div>
+  <div class="spacer"></div>
+  <button class="btn ghost mobtn" id="infoToggle">Details</button>
+  <button class="btn" id="clearBtn">Clear</button>
+  <button class="btn primary" id="saveBtn">Save / Export</button>
+</header>
+
+<div class="optbar">
+  <div class="grp">
+    <label>Color</label>
+    <div class="swatches" id="swatches"></div>
+  </div>
+  <div class="grp">
+    <label>Size</label>
+    <input type="range" id="widthRange" min="1" max="10" value="3">
+  </div>
+  <div class="grp">
+    <label class="toggle"><input type="checkbox" id="snapChk" checked> Snap to grid</label>
+  </div>
+  <div class="spacer" style="flex:1"></div>
+  <div class="grp seg" id="zoomSeg">
+    <button id="zoomOut">–</button>
+    <button id="zoomFit" class="on">Fit</button>
+    <button id="zoomIn">+</button>
+  </div>
+</div>
+
+<div class="main">
+  <!-- Tool rail -->
+  <div class="toolrail" id="toolrail">
+    <div class="tool active" data-tool="freehand" title="Freehand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-1 4-9 7-9s2 6 4 6 3-4 5-4"/></svg><small>Draw</small></div>
+    <div class="tool" data-tool="line" title="Line (snaps, shows length)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20 20 4"/><circle cx="4" cy="20" r="2" fill="currentColor"/><circle cx="20" cy="4" r="2" fill="currentColor"/></svg><small>Line</small></div>
+    <div class="tool" data-tool="rect" title="Rectangle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1"/></svg><small>Box</small></div>
+    <div class="tool" data-tool="circle" title="Circle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg><small>Circle</small></div>
+    <div class="tool" data-tool="text" title="Text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 6h14M12 6v13M9 19h6"/></svg><small>Text</small></div>
+    <div class="tool" data-tool="stamp" title="Legend stamps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 21l-4.9 2.2.9-5.5-4-3.9 5.5-.8z"/></svg><small>Stamp</small></div>
+    <div class="tool" data-tool="erase" title="Eraser (tap an object)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 16l6 6h8M16 4l4 4-9 9-6-6z"/></svg><small>Erase</small></div>
+    <div class="tool" data-tool="pan" title="Pan / move view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11m0-1.5a1.5 1.5 0 0 1 3 0V12m0-1a1.5 1.5 0 0 1 3 0v4a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L6 18c-1-1.5.8-3 2-1.8l1 .8V8.5a1.5 1.5 0 0 1 3 0"/></svg><small>Pan</small></div>
+    <div style="height:6px"></div>
+    <div class="tool" id="undoBtn" title="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7 4 12l5 5M4 12h11a5 5 0 0 1 0 10h-1"/></svg><small>Undo</small></div>
+    <div class="tool" id="redoBtn" title="Redo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7l5 5-5 5M20 12H9a5 5 0 0 0 0 10h1"/></svg><small>Redo</small></div>
+  </div>
+
+  <!-- Canvas stage -->
+  <div class="stage">
+    <div class="canvas-wrap" id="wrap">
+      <canvas id="grid"></canvas>
+    </div>
+    <div class="stamp-pop" id="stampPop"></div>
+  </div>
+
+  <!-- Info / form panel -->
+  <div class="info" id="info">
+    <h3>Inspection Details</h3>
+    <div class="fld"><label>Pest Control Company <span class="req">*</span></label><input id="f_company" data-req placeholder="Pest control company name"></div>
+    <div class="fld"><label>Inspector <span class="req">*</span></label><input id="f_inspector" data-req placeholder="Inspector name"></div>
+    <div class="row2">
+      <div class="fld"><label>Date <span class="req">*</span></label><input id="f_date" data-req type="date"></div>
+      <div class="fld"><label>Account # <span class="req">*</span></label><input id="f_account" data-req placeholder="Acct"></div>
+    </div>
+    <div class="fld"><label>Customer <span class="req">*</span></label><input id="f_lastname" data-req placeholder="Customer name"></div>
+    <div class="fld"><label>Property Address <span class="req">*</span></label><input id="f_address" data-req placeholder="Street, City, State"></div>
+    <div class="row2">
+      <div class="fld"><label>Linear Footage</label><input id="f_linear" inputmode="decimal" placeholder="ft"></div>
+      <div class="fld"><label>Square Footage</label><input id="f_square" inputmode="decimal" placeholder="ft²"></div>
+    </div>
+
+    <div class="divider"></div>
+    <h3>Foundation</h3>
+    <div class="chips" id="foundationChips"></div>
+
+    <div class="divider"></div>
+    <h3>Structure / Other</h3>
+    <div class="chips" id="otherChips"></div>
+
+    <div class="divider"></div>
+    <h3>Treatment Recommended / Performed</h3>
+    <div class="chips" id="treatmentChips"></div>
+
+    <div class="divider"></div>
+    <h3>Notes</h3>
+    <div class="fld"><textarea id="f_notes" rows="3" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--line); background:#fff; color:#15181d; font-size:13px; resize:vertical;" placeholder="Additional observations..."></textarea></div>
+  </div>
+</div>
+
+<!-- Export modal -->
+<div class="modal-bg" id="exportModal">
+  <div class="modal">
+    <h2>Save / Export</h2>
+    <p>Choose how to save this termite graph. The exported file includes all details, the diagram, and the full legend.</p>
+    <div id="missingBox" style="display:none; background:#3a1c1e; border:1px solid var(--danger); border-radius:10px; padding:10px 12px; margin-bottom:12px;">
+      <strong style="color:#ff8a8d; font-size:13px;">Required fields missing</strong>
+      <ul class="miss-list" id="missList"></ul>
+    </div>
+    <div class="acts" style="justify-content:stretch; flex-direction:column;">
+      <button class="btn primary" id="expPhoto" style="width:100%; padding:12px;">📷 Save Image to Camera Roll</button>
+      <button class="btn blue" id="expPdf" style="width:100%; padding:12px;">📄 Save PDF to Files</button>
+      <button class="btn" id="expEmail" style="width:100%; padding:12px;">✉️ Email PDF</button>
+      <button class="btn ghost" id="expClose" style="width:100%;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   TERMITE GRAPH — single-file, offline-capable field app
+   ============================================================ */
+"use strict";
+
+/* ---------- Grid config: 1 small square = 1 foot ---------- */
+const FEET_W = 100;         // property width in feet  (large structures supported)
+const FEET_H = 150;         // property height in feet
+const PXF    = 16;          // device pixels per foot (drawing resolution)
+const MAJOR  = 10;          // heavy grid line every 10 ft
+const cv = document.getElementById('grid');
+const ctx = cv.getContext('2d');
+cv.width  = FEET_W * PXF;
+cv.height = FEET_H * PXF;
+
+const wrap = document.getElementById('wrap');
+
+/* ---------- State ---------- */
+let objects = [];           // committed drawing objects
+let redoStack = [];
+let tool = 'freehand';
+let color = '#e5141d';
+let strokeW = 3;
+let snap = true;
+let displayScale = 1;       // CSS zoom factor
+let current = null;         // in-progress object
+let activeStamp = 'chimney';
+
+/* ---------- Stamp library ---------- */
+/* category: structure | treatment | evidence | conducive
+   each stamp draws a small glyph; legend renders name + glyph */
+const STAMPS = {
+  // Structures
+  chimney:{cat:'structure', name:'Chimney', color:'#444', kind:'box', label:'CH'},
+  bulkhead:{cat:'structure', name:'Bulkhead Doors', color:'#444', kind:'bulk', label:''},
+  well:{cat:'structure', name:'Well Location', color:'#1d4ed8', kind:'circ', label:'W'},
+  sump:{cat:'structure', name:'Sump Pump', color:'#1d4ed8', kind:'box', label:'SP'},
+  hosebib:{cat:'structure', name:'Hose Bib / Spigot', color:'#1d4ed8', kind:'circ', label:'HB'},
+  acunit:{cat:'structure', name:'A/C Condenser', color:'#444', kind:'box', label:'AC'},
+  porch:{cat:'structure', name:'Porch / Deck', color:'#444', kind:'box', label:'PO'},
+  crawl:{cat:'structure', name:'Crawl Space Access', color:'#444', kind:'box', label:'CA'},
+  downspout:{cat:'structure', name:'Downspout', color:'#1d4ed8', kind:'tri', label:'DS'},
+  door:{cat:'structure', name:'Door', color:'#444', kind:'box', label:'DR'},
+  // Treatment
+  mon_station:{cat:'treatment', name:'Monitoring / Baiting Station', color:'#1d4ed8', kind:'circ', label:'MS'},
+  drill:{cat:'treatment', name:'Drilling', color:'#1d4ed8', kind:'circ', label:'D'},
+  backfill:{cat:'treatment', name:'Backfill Method', color:'#1d4ed8', kind:'circ', label:'B'},
+  liquid:{cat:'treatment', name:'Liquid Treatment', color:'#1d4ed8', kind:'circ', label:'L'},
+  woodtrt:{cat:'treatment', name:'Wood Treatment', color:'#1d4ed8', kind:'circ', label:'W'},
+  trench:{cat:'treatment', name:'Trench / Rod', color:'#1d4ed8', kind:'circ', label:'T'},
+  foam:{cat:'treatment', name:'Foam Treatment', color:'#1d4ed8', kind:'circ', label:'F'},
+  // Evidence
+  live:{cat:'evidence', name:'Live Termites', color:'#c10000', kind:'badge', label:'LT'},
+  tdamage:{cat:'evidence', name:'Termite Damage', color:'#c10000', kind:'badge', label:'TD'},
+  suspected:{cat:'evidence', name:'Suspected Termite Damage', color:'#c10000', kind:'badge', label:'STD'},
+  hidden:{cat:'evidence', name:'Possible Hidden Damage', color:'#c10000', kind:'badge', label:'PHD'},
+  mudtube:{cat:'evidence', name:'Mud Tube / Shelter Tube', color:'#c10000', kind:'badge', label:'MT'},
+  swarmers:{cat:'evidence', name:'Swarmers / Discarded Wings', color:'#c10000', kind:'badge', label:'SW'},
+  prevtrt:{cat:'evidence', name:'Evidence of Prior Treatment', color:'#7a2da8', kind:'badge', label:'PT'},
+  // Conducive conditions
+  wooddebris:{cat:'conducive', name:'Wood / Cellulose Debris', color:'#d97706', kind:'badge', label:'WD'},
+  woodground:{cat:'conducive', name:'Wood-to-Ground Contact', color:'#d97706', kind:'badge', label:'WG'},
+  standwater:{cat:'conducive', name:'Standing Water', color:'#d97706', kind:'badge', label:'H₂O'},
+  moisture:{cat:'conducive', name:'Excessive Moisture', color:'#d97706', kind:'badge', label:'MO'},
+  vent:{cat:'conducive', name:'Insufficient Ventilation', color:'#d97706', kind:'badge', label:'IV'},
+  grade:{cat:'conducive', name:'Faulty Grade', color:'#d97706', kind:'badge', label:'FG'},
+  plumbing:{cat:'conducive', name:'Faulty Plumbing', color:'#d97706', kind:'badge', label:'FP'},
+  foamboard:{cat:'conducive', name:'Foam Board Below Grade', color:'#d97706', kind:'badge', label:'FB'},
+  mulch:{cat:'conducive', name:'Mulch Against Foundation', color:'#d97706', kind:'badge', label:'MU'},
+  formboard:{cat:'conducive', name:'Form Boards Left In Place', color:'#d97706', kind:'badge', label:'FM'},
+};
+const CAT_NAMES = {structure:'Structures', treatment:'Treatment', evidence:'Termite Evidence', conducive:'Conducive Conditions'};
+
+/* ---------- Checklists ---------- */
+const FOUNDATIONS = ['Poured Concrete','Concrete Slab','Hollow Block','Stone','Brick','Other'];
+const OTHERS = ['Finished Basement','Unfinished Basement','Attached Garage','Detached Garage','Crawl Space','Slab on Grade','Well','Cistern','Sump Pump','Floor Drain','French Drain','Standing Water'];
+const TREATMENTS = [
+  'Drill & treat basement floor adjacent foundation',
+  'Drill & treat garage floor adjacent to foundation',
+  'Trench/rod crawlspace soil adjacent foundation',
+  'Trench/rod crawl space soil adjacent to piers',
+  'Drill & treat hollow block foundation voids',
+  'Treat wood members up to point of run off',
+  'Trench/rod adjacent foundation (cross rodding)',
+  'Drill, rod & treat slab adjacent to foundation',
+  'Drill, rod & treat dirt-filled porch',
+  'Drill, rod & treat driveway adjacent to structure',
+  'Drill, rod & treat hollow block foundation walls',
+  'Install monitoring / bait stations',
+];
+
+/* ================= Rendering ================= */
+function drawGrid(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,cv.width,cv.height);
+  // minor lines
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#d3dde7';
+  ctx.beginPath();
+  for(let x=0;x<=FEET_W;x++){ const px=x*PXF+0.5; ctx.moveTo(px,0); ctx.lineTo(px,cv.height); }
+  for(let y=0;y<=FEET_H;y++){ const py=y*PXF+0.5; ctx.moveTo(0,py); ctx.lineTo(cv.width,py); }
+  ctx.stroke();
+  // major lines (every 10 ft)
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#7c8a99';
+  ctx.beginPath();
+  for(let x=0;x<=FEET_W;x+=MAJOR){ const px=x*PXF+0.5; ctx.moveTo(px,0); ctx.lineTo(px,cv.height); }
+  for(let y=0;y<=FEET_H;y+=MAJOR){ const py=y*PXF+0.5; ctx.moveTo(0,py); ctx.lineTo(cv.width,py); }
+  ctx.stroke();
+  // 10ft scale ticks label top-left
+  ctx.fillStyle = '#9fb0bf';
+  ctx.font = `${PXF*0.7}px -apple-system,Arial`;
+  ctx.textBaseline='top';
+  for(let x=MAJOR;x<FEET_W;x+=MAJOR){ ctx.fillText(x+"'", x*PXF+2, 2); }
+  for(let y=MAJOR;y<FEET_H;y+=MAJOR){ ctx.fillText(y+"'", 2, y*PXF+2); }
+}
+
+function drawObject(o){
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  if(o.type==='free'){
+    ctx.strokeStyle=o.color; ctx.lineWidth=o.w;
+    ctx.beginPath();
+    o.pts.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+    ctx.stroke();
+  } else if(o.type==='line'){
+    ctx.strokeStyle=o.color; ctx.lineWidth=o.w;
+    ctx.beginPath(); ctx.moveTo(o.x1,o.y1); ctx.lineTo(o.x2,o.y2); ctx.stroke();
+    drawLenLabel(o.x1,o.y1,o.x2,o.y2,o.color);
+  } else if(o.type==='rect'){
+    ctx.strokeStyle=o.color; ctx.lineWidth=o.w;
+    const x=Math.min(o.x1,o.x2), y=Math.min(o.y1,o.y2), w=Math.abs(o.x2-o.x1), h=Math.abs(o.y2-o.y1);
+    ctx.strokeRect(x,y,w,h);
+    drawDimLabel(x,y,w,h,o.color);
+  } else if(o.type==='circle'){
+    ctx.strokeStyle=o.color; ctx.lineWidth=o.w;
+    const r=Math.hypot(o.x2-o.x1,o.y2-o.y1);
+    ctx.beginPath(); ctx.arc(o.x1,o.y1,r,0,Math.PI*2); ctx.stroke();
+  } else if(o.type==='text'){
+    ctx.fillStyle=o.color;
+    ctx.font=`600 ${o.size}px -apple-system,Arial`;
+    ctx.textBaseline='top'; ctx.textAlign='left';
+    o.text.split('\n').forEach((ln,i)=> ctx.fillText(ln,o.x,o.y+i*o.size*1.2));
+  } else if(o.type==='stamp'){
+    drawStamp(o.x,o.y,o.key,o.size);
+  }
+}
+
+function drawLenLabel(x1,y1,x2,y2,col){
+  const ft = Math.hypot(x2-x1,y2-y1)/PXF;
+  const txt = (Math.round(ft*2)/2).toString()+"'";
+  const mx=(x1+x2)/2, my=(y1+y2)/2;
+  ctx.save();
+  ctx.font=`700 ${PXF*0.85}px -apple-system,Arial`;
+  ctx.textBaseline='middle'; ctx.textAlign='center';
+  const w=ctx.measureText(txt).width+8;
+  ctx.fillStyle='#ffffffea'; ctx.strokeStyle=col; ctx.lineWidth=1;
+  roundRect(mx-w/2,my-PXF*0.65,w,PXF*1.3,4); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=col; ctx.fillText(txt,mx,my);
+  ctx.restore();
+}
+function drawDimLabel(x,y,w,h,col){
+  const fw=(Math.round(w/PXF*2)/2), fh=(Math.round(h/PXF*2)/2);
+  if(fw<1&&fh<1) return;
+  const txt=`${fw}' × ${fh}'`;
+  ctx.save();
+  ctx.font=`700 ${PXF*0.8}px -apple-system,Arial`;
+  ctx.textBaseline='middle'; ctx.textAlign='center';
+  const tw=ctx.measureText(txt).width+8;
+  ctx.fillStyle='#ffffffea'; ctx.strokeStyle=col; ctx.lineWidth=1;
+  roundRect(x+w/2-tw/2,y+h/2-PXF*0.6,tw,PXF*1.2,4); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=col; ctx.fillText(txt,x+w/2,y+h/2);
+  ctx.restore();
+}
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+/* Draw a stamp glyph centered at (x,y). size = box size in px */
+function drawStamp(x,y,key,size){
+  const s = STAMPS[key]; if(!s) return;
+  const r = size/2;
+  ctx.save();
+  ctx.lineWidth = Math.max(1.5, size*0.09);
+  ctx.strokeStyle = s.color; ctx.fillStyle = s.color;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  if(s.kind==='circ'){
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle='#ffffff'; ctx.fill(); ctx.strokeStyle=s.color; ctx.stroke();
+    ctx.fillStyle=s.color; ctx.font=`800 ${size*0.5}px -apple-system,Arial`; ctx.fillText(s.label,x,y+size*0.02);
+  } else if(s.kind==='box'){
+    ctx.fillStyle='#ffffff'; ctx.fillRect(x-r,y-r,size,size);
+    ctx.strokeStyle=s.color; ctx.strokeRect(x-r,y-r,size,size);
+    ctx.fillStyle=s.color; ctx.font=`800 ${size*0.42}px -apple-system,Arial`; ctx.fillText(s.label,x,y+size*0.02);
+  } else if(s.kind==='badge'){
+    ctx.fillStyle=s.color;
+    roundRect(x-r,y-size*0.35,size,size*0.7,size*0.18); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font=`800 ${size*0.42}px -apple-system,Arial`; ctx.fillText(s.label,x,y+size*0.02);
+  } else if(s.kind==='bulk'){
+    ctx.fillStyle='#ffffff'; ctx.fillRect(x-r,y-r*0.7,size,size*0.7);
+    ctx.strokeStyle=s.color; ctx.strokeRect(x-r,y-r*0.7,size,size*0.7);
+    ctx.beginPath(); ctx.moveTo(x,y-r*0.7); ctx.lineTo(x,y); ctx.stroke();
+  } else if(s.kind==='tri'){
+    ctx.fillStyle='#ffffff';
+    ctx.beginPath(); ctx.moveTo(x,y-r); ctx.lineTo(x+r,y+r); ctx.lineTo(x-r,y+r); ctx.closePath();
+    ctx.fill(); ctx.strokeStyle=s.color; ctx.stroke();
+    ctx.fillStyle=s.color; ctx.font=`800 ${size*0.34}px -apple-system,Arial`; ctx.fillText(s.label,x,y+size*0.12);
+  }
+  ctx.restore();
+}
+
+function render(){
+  drawGrid();
+  for(const o of objects) drawObject(o);
+  if(current) drawObject(current);
+}
+
+/* ================= Pointer / drawing ================= */
+function toCanvas(e){
+  const rect = cv.getBoundingClientRect();
+  let x = (e.clientX-rect.left) * (cv.width/rect.width);
+  let y = (e.clientY-rect.top)  * (cv.height/rect.height);
+  return {x,y};
+}
+function snapPt(p){
+  if(!snap) return p;
+  return { x: Math.round(p.x/PXF)*PXF, y: Math.round(p.y/PXF)*PXF };
+}
+
+const pointers = new Map();       // active pointers: id -> {x,y,type}
+let drawing=false, panStart=null, activeId=null, pinch=null;
+const touches = ()=>[...pointers.values()].filter(p=>p.type==='touch');
+const penActive = ()=>[...pointers.values()].some(p=>p.type==='pen');
+
+cv.addEventListener('pointerdown', e=>{
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY,type:e.pointerType});
+
+  // Two fingers => pinch-zoom (works in any tool). Cancel any in-progress stroke.
+  if(touches().length>=2){ abortDraw(); startPinch(); return; }
+  // Apple Pencil palm rejection: ignore touch input while the pen is in use.
+  if(e.pointerType==='touch' && penActive()) return;
+
+  if(tool==='pan'){ panStart={x:e.clientX,y:e.clientY,l:wrap.scrollLeft,t:wrap.scrollTop}; activeId=e.pointerId; cv.setPointerCapture(e.pointerId); return; }
+  const p = toCanvas(e);
+  if(tool==='text'){ placeText(p); return; }
+  if(tool==='stamp'){ commit({type:'stamp', x:snap?snapPt(p).x:p.x, y:snap?snapPt(p).y:p.y, key:activeStamp, size:PXF*1.6}); return; }
+  if(tool==='erase'){ eraseAt(p); return; }
+  drawing=true; activeId=e.pointerId; cv.setPointerCapture(e.pointerId);
+  if(tool==='freehand'){ current={type:'free', color, w:strokeW, pts:[p]}; }
+  else if(tool==='line'){ const s=snapPt(p); current={type:'line', color, w:strokeW, x1:s.x,y1:s.y,x2:s.x,y2:s.y}; }
+  else if(tool==='rect'){ const s=snapPt(p); current={type:'rect', color, w:strokeW, x1:s.x,y1:s.y,x2:s.x,y2:s.y}; }
+  else if(tool==='circle'){ const s=snapPt(p); current={type:'circle', color, w:strokeW, x1:s.x,y1:s.y,x2:s.x,y2:s.y}; }
+  render();
+});
+
+cv.addEventListener('pointermove', e=>{
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId,{x:e.clientX,y:e.clientY,type:e.pointerType});
+  if(pinch){ updatePinch(); return; }
+  if(tool==='pan' && panStart){ wrap.scrollLeft=panStart.l-(e.clientX-panStart.x); wrap.scrollTop=panStart.t-(e.clientY-panStart.y); return; }
+  if(!drawing||!current||e.pointerId!==activeId) return;
+  const p = toCanvas(e);
+  if(current.type==='free'){ current.pts.push(p); }
+  else { const s=snapPt(p); current.x2=s.x; current.y2=s.y; }
+  render();
+});
+
+function ptrEnd(e){
+  pointers.delete(e.pointerId);
+  if(pinch && touches().length<2){ pinch=null; }
+  if(tool==='pan' && e.pointerId===activeId){ panStart=null; activeId=null; return; }
+  if(drawing && e.pointerId===activeId) finishDraw();
+}
+cv.addEventListener('pointerup', ptrEnd);
+cv.addEventListener('pointercancel', ptrEnd);
+
+function abortDraw(){ if(drawing){ drawing=false; current=null; activeId=null; render(); } }
+function finishDraw(){
+  drawing=false; activeId=null;
+  const c=current; current=null;
+  if(!c){ render(); return; }
+  if(c.type==='free' && c.pts.length<2){ render(); return; }
+  if((c.type==='line'||c.type==='rect'||c.type==='circle') && c.x1===c.x2 && c.y1===c.y2){ render(); return; }
+  commit(c);
+}
+
+/* ----- Two-finger pinch zoom (anchored on the pinch midpoint) ----- */
+function startPinch(){
+  const t=touches(); if(t.length<2) return;
+  pinch={ dist:Math.hypot(t[0].x-t[1].x,t[0].y-t[1].y), scale:displayScale };
+}
+function updatePinch(){
+  const t=touches(); if(t.length<2) return;
+  const nd=Math.hypot(t[0].x-t[1].x,t[0].y-t[1].y);
+  const mx=(t[0].x+t[1].x)/2, my=(t[0].y+t[1].y)/2;
+  const rect=wrap.getBoundingClientRect();
+  const oldW=cv.offsetWidth, oldH=cv.offsetHeight, oldL=cv.offsetLeft, oldT=cv.offsetTop;
+  const fx=((mx-rect.left)+wrap.scrollLeft-oldL)/oldW;
+  const fy=((my-rect.top)+wrap.scrollTop-oldT)/oldH;
+  displayScale=Math.max(0.35,Math.min(pinch.scale*(nd/pinch.dist),4));
+  setSeg(null); applyZoom();
+  const newW=cv.offsetWidth, newH=cv.offsetHeight, newL=cv.offsetLeft, newT=cv.offsetTop;
+  wrap.scrollLeft = fx*newW + newL - (mx-rect.left);
+  wrap.scrollTop  = fy*newH + newT - (my-rect.top);
+}
+
+function commit(o){ objects.push(o); redoStack.length=0; render(); }
+
+function eraseAt(p){
+  for(let i=objects.length-1;i>=0;i--){
+    if(hitTest(objects[i],p)){ redoStack.length=0; objects.splice(i,1); render(); return; }
+  }
+}
+function hitTest(o,p){
+  const tol=Math.max(8,(o.w||3)+8);
+  if(o.type==='free'){ return o.pts.some(q=>Math.hypot(q.x-p.x,q.y-p.y)<tol); }
+  if(o.type==='line'){ return distToSeg(p,o.x1,o.y1,o.x2,o.y2)<tol; }
+  if(o.type==='rect'){ const x=Math.min(o.x1,o.x2),y=Math.min(o.y1,o.y2),w=Math.abs(o.x2-o.x1),h=Math.abs(o.y2-o.y1);
+    return p.x>x-tol&&p.x<x+w+tol&&p.y>y-tol&&p.y<y+h+tol &&
+      !(p.x>x+tol&&p.x<x+w-tol&&p.y>y+tol&&p.y<y+h-tol); }
+  if(o.type==='circle'){ const r=Math.hypot(o.x2-o.x1,o.y2-o.y1); return Math.abs(Math.hypot(p.x-o.x1,p.y-o.y1)-r)<tol; }
+  if(o.type==='text'){ return p.x>o.x-tol&&p.x<o.x+o.size*8&&p.y>o.y-tol&&p.y<o.y+o.size*2; }
+  if(o.type==='stamp'){ return Math.hypot(p.x-o.x,p.y-o.y)<o.size; }
+  return false;
+}
+function distToSeg(p,x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1, L=dx*dx+dy*dy;
+  let t = L? ((p.x-x1)*dx+(p.y-y1)*dy)/L : 0; t=Math.max(0,Math.min(1,t));
+  return Math.hypot(p.x-(x1+t*dx), p.y-(y1+t*dy));
+}
+
+function placeText(p){
+  const txt = prompt('Enter label text:');
+  if(txt===null||txt.trim()==='') return;
+  commit({type:'text', x:p.x, y:p.y, text:txt, color, size:PXF*1.1});
+}
+
+/* ================= Undo / Redo / Clear ================= */
+function undo(){ if(!objects.length) return; redoStack.push(objects.pop()); render(); }
+function redo(){ if(!redoStack.length) return; objects.push(redoStack.pop()); render(); }
+document.getElementById('undoBtn').onclick=undo;
+document.getElementById('redoBtn').onclick=redo;
+document.getElementById('clearBtn').onclick=()=>{ if(objects.length && confirm('Clear the entire diagram? This cannot be undone.')){ objects=[]; redoStack=[]; render(); } };
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='z'){ e.preventDefault(); e.shiftKey?redo():undo(); }
+});
+
+/* ================= Tool rail ================= */
+const stampPop = document.getElementById('stampPop');
+document.querySelectorAll('.tool[data-tool]').forEach(el=>{
+  el.onclick=()=>{
+    tool = el.dataset.tool;
+    document.querySelectorAll('.tool[data-tool]').forEach(t=>t.classList.toggle('active',t===el));
+    cv.style.cursor = tool==='pan'?'grab': tool==='text'?'text':'crosshair';
+    stampPop.classList.toggle('show', tool==='stamp');
+  };
+});
+
+/* Build stamp palette */
+(function buildStampPalette(){
+  const cats={};
+  Object.entries(STAMPS).forEach(([k,s])=>{ (cats[s.cat]=cats[s.cat]||[]).push([k,s]); });
+  let html='';
+  ['structure','treatment','evidence','conducive'].forEach(cat=>{
+    html+=`<div class="cat">${CAT_NAMES[cat]}</div><div class="stamp-grid">`;
+    cats[cat].forEach(([k,s])=>{
+      html+=`<div class="stamp-btn" data-key="${k}"><canvas class="stamp-ico" width="40" height="40" data-icon="${k}"></canvas><span>${s.name}</span></div>`;
+    });
+    html+='</div>';
+  });
+  stampPop.innerHTML=html;
+  // render icons
+  stampPop.querySelectorAll('canvas[data-icon]').forEach(c=>{
+    const ic=c.getContext('2d'); const key=c.dataset.icon;
+    drawStampOn(ic,20,20,key,26);
+  });
+  stampPop.querySelectorAll('.stamp-btn').forEach(b=>{
+    b.onclick=()=>{ activeStamp=b.dataset.key;
+      stampPop.querySelectorAll('.stamp-btn').forEach(x=>x.classList.toggle('sel',x===b)); };
+  });
+  stampPop.querySelector('.stamp-btn').classList.add('sel');
+})();
+
+/* generic stamp drawer onto any context (used for palette icons + legend) */
+function drawStampOn(c,x,y,key,size){
+  const s=STAMPS[key]; if(!s) return; const r=size/2;
+  c.save(); c.lineWidth=Math.max(1.4,size*0.09); c.textAlign='center'; c.textBaseline='middle';
+  if(s.kind==='circ'){ c.beginPath(); c.arc(x,y,r,0,7); c.fillStyle='#fff'; c.fill(); c.strokeStyle=s.color; c.stroke();
+    c.fillStyle=s.color; c.font=`800 ${size*0.5}px Arial`; c.fillText(s.label,x,y+size*0.02);
+  } else if(s.kind==='box'){ c.fillStyle='#fff'; c.fillRect(x-r,y-r,size,size); c.strokeStyle=s.color; c.strokeRect(x-r,y-r,size,size);
+    c.fillStyle=s.color; c.font=`800 ${size*0.42}px Arial`; c.fillText(s.label,x,y+size*0.02);
+  } else if(s.kind==='badge'){ c.fillStyle=s.color; rr(c,x-r,y-size*0.35,size,size*0.7,size*0.18); c.fill();
+    c.fillStyle='#fff'; c.font=`800 ${size*0.4}px Arial`; c.fillText(s.label,x,y+size*0.02);
+  } else if(s.kind==='bulk'){ c.fillStyle='#fff'; c.fillRect(x-r,y-r*0.7,size,size*0.7); c.strokeStyle=s.color; c.strokeRect(x-r,y-r*0.7,size,size*0.7);
+    c.beginPath(); c.moveTo(x,y-r*0.7); c.lineTo(x,y); c.stroke();
+  } else if(s.kind==='tri'){ c.fillStyle='#fff'; c.beginPath(); c.moveTo(x,y-r); c.lineTo(x+r,y+r); c.lineTo(x-r,y+r); c.closePath(); c.fill();
+    c.strokeStyle=s.color; c.stroke(); c.fillStyle=s.color; c.font=`800 ${size*0.32}px Arial`; c.fillText(s.label,x,y+size*0.12); }
+  c.restore();
+}
+function rr(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+
+/* ================= Options bar ================= */
+const PALETTE=['#e5141d','#1d4ed8','#1f9d4d','#111111','#f59e0b','#7a2da8','#ec4899','#0891b2'];
+const swWrap=document.getElementById('swatches');
+PALETTE.forEach((c,i)=>{
+  const d=document.createElement('div'); d.className='sw'+(i===0?' sel':''); d.style.background=c;
+  d.onclick=()=>{ color=c; swWrap.querySelectorAll('.sw').forEach(s=>s.classList.remove('sel')); d.classList.add('sel'); };
+  swWrap.appendChild(d);
+});
+document.getElementById('widthRange').oninput=e=>strokeW=+e.target.value;
+document.getElementById('snapChk').onchange=e=>snap=e.target.checked;
+
+/* Zoom */
+function applyZoom(){ cv.style.width=(FEET_W*PXF*displayScale/2)+'px'; }
+function fitZoom(){
+  const avail = wrap.clientWidth-28;
+  displayScale = (avail/(FEET_W*PXF))*2; // *2 because applyZoom divides by 2 (retina-ish base)
+  if(displayScale>2) displayScale=2;
+  applyZoom();
+}
+document.getElementById('zoomIn').onclick=()=>{ displayScale=Math.min(displayScale*1.2,4); setSeg(null); applyZoom(); };
+document.getElementById('zoomOut').onclick=()=>{ displayScale=Math.max(displayScale/1.2,0.4); setSeg(null); applyZoom(); };
+document.getElementById('zoomFit').onclick=()=>{ setSeg('zoomFit'); fitZoom(); };
+function setSeg(id){ document.querySelectorAll('#zoomSeg button').forEach(b=>b.classList.toggle('on',b.id===id)); }
+window.addEventListener('resize', ()=>{ if(document.getElementById('zoomFit').classList.contains('on')) fitZoom(); });
+
+/* ================= Build checklists ================= */
+const selected={foundation:new Set(), other:new Set(), treatment:new Set()};
+function buildChips(containerId, items, bucket){
+  const wrap=document.getElementById(containerId);
+  items.forEach(it=>{
+    const c=document.createElement('div'); c.className='chip'; c.textContent=it;
+    c.onclick=()=>{ if(bucket.has(it)){bucket.delete(it);c.classList.remove('on');} else {bucket.add(it);c.classList.add('on');} };
+    wrap.appendChild(c);
+  });
+}
+buildChips('foundationChips',FOUNDATIONS,selected.foundation);
+buildChips('otherChips',OTHERS,selected.other);
+buildChips('treatmentChips',TREATMENTS,selected.treatment);
+
+/* default date today */
+document.getElementById('f_date').value = new Date().toISOString().slice(0,10);
+
+/* mobile info toggle */
+document.getElementById('infoToggle').onclick=()=>document.getElementById('info').classList.toggle('open');
+
+/* ================= Export ================= */
+const F = id=>document.getElementById(id).value.trim();
+function getMissing(){
+  const map={f_company:'Pest Control Company', f_inspector:'Inspector', f_date:'Date', f_account:'Account #', f_lastname:'Customer', f_address:'Property Address'};
+  const miss=[];
+  Object.keys(map).forEach(id=>{ const el=document.getElementById(id); if(!el.value.trim()){ miss.push(map[id]); el.classList.add('missing'); } else el.classList.remove('missing'); });
+  return miss;
+}
+
+const exportModal=document.getElementById('exportModal');
+document.getElementById('saveBtn').onclick=()=>{
+  const miss=getMissing();
+  const box=document.getElementById('missingBox');
+  if(miss.length){ box.style.display='block'; document.getElementById('missList').innerHTML=miss.map(m=>`<li>${m}</li>`).join(''); }
+  else box.style.display='none';
+  exportModal.classList.add('show');
+};
+document.getElementById('expClose').onclick=()=>exportModal.classList.remove('show');
+exportModal.onclick=e=>{ if(e.target===exportModal) exportModal.classList.remove('show'); };
+
+/* ---- Compose the full export page (header + diagram + legend) ---- */
+function buildExportCanvas(){
+  const W = 1240;                     // fixed export page width (keeps layout balanced for any grid size)
+  const HEAD = 250;                   // header band
+  const dW = W, dH = Math.round(cv.height*(W/cv.width));   // diagram scaled to page width
+  // measure legend band height first so nothing clips
+  const meas = document.createElement('canvas').getContext('2d');
+  const legendH = measureLegendBand(meas, W);
+  const out = document.createElement('canvas');
+  out.width = W; out.height = HEAD + dH + legendH;
+  const g = out.getContext('2d');
+  g.fillStyle='#fff'; g.fillRect(0,0,out.width,out.height);
+
+  /* Header band */
+  g.fillStyle='#f47b20'; g.fillRect(0,0,out.width,8);
+  g.fillStyle='#15181d'; g.font='800 46px Arial'; g.textBaseline='top'; g.textAlign='left';
+  g.fillText('TERMITE GRAPH', 28, 26);
+  g.fillStyle='#f47b20'; g.font='800 30px Arial';
+  g.fillText((F('f_company')||'________________').toUpperCase(), 28, 80);
+
+  g.fillStyle='#15181d'; g.font='600 22px Arial';
+  const col1=28, col2=W*0.55; let yy=130;
+  const line=(label,val,x,y)=>{ g.fillStyle='#6b7280'; g.font='700 18px Arial'; g.fillText(label, x, y);
+    g.fillStyle='#15181d'; g.font='600 22px Arial'; g.fillText(val||'—', x+ g.measureText(label).width + 12, y-2); };
+  line('ACCOUNT #', F('f_account'), col1, yy);
+  line('DATE', F('f_date'), col2, yy); yy+=34;
+  line('CUSTOMER', F('f_lastname'), col1, yy);
+  line('INSPECTOR', F('f_inspector'), col2, yy); yy+=34;
+  line('ADDRESS', F('f_address'), col1, yy); yy+=34;
+  line('LINEAR FOOTAGE', F('f_linear')? F('f_linear')+" ft":'', col1, yy);
+  line('SQUARE FOOTAGE', F('f_square')? F('f_square')+" ft²":'', col2, yy);
+
+  /* Diagram (scaled into the page width) */
+  g.drawImage(cv, 0, 0, cv.width, cv.height, 0, HEAD, dW, dH);
+  g.strokeStyle='#c9d4e0'; g.lineWidth=2; g.strokeRect(0.5,HEAD+0.5,dW-1,dH-1);
+
+  /* Legend / footer */
+  drawLegendBand(g, 0, HEAD+dH, W, legendH, false);
+  return out;
+}
+
+/* Legend band geometry constants (shared by measure + draw) */
+const LB = {pad:28, symTop:64, catHdr:28, rowH:34, colsCL:3, clHdr:30, clLine:20, foot:46};
+
+/* Returns the band height needed; if draw=true, actually renders at translate(x,y) */
+function measureLegendBand(g, W){ return drawLegendBand(g, 0, 0, W, 0, true); }
+
+function drawLegendBand(g, x, y, W, H, measureOnly){
+  // ----- symbols block height -----
+  const perCat = {};
+  ['structure','treatment','evidence','conducive'].forEach(cat=>{
+    perCat[cat]=Object.values(STAMPS).filter(s=>s.cat===cat).length;
+  });
+  const maxRows = Math.max(...Object.values(perCat));
+  const symBottom = LB.symTop + LB.catHdr + maxRows*LB.rowH;
+
+  // ----- checklist block height -----
+  const clColW = (W - LB.pad*2)/LB.colsCL;
+  const tmp = g; tmp.font='500 14px Arial';
+  const listLines = (set,maxW)=>{ let n=0; const a=[...set]; if(!a.length) return 1;
+    a.forEach(it=>{ n+=wrapText(tmp,'• '+it,maxW).length; }); return n; };
+  const clRows = Math.max(
+    listLines(selected.foundation, clColW-20),
+    listLines(selected.other, clColW-20),
+    listLines(selected.treatment, clColW-20)
+  );
+  const clTop = symBottom + 24;
+  const clBottom = clTop + LB.clHdr + clRows*LB.clLine;
+
+  // ----- notes height -----
+  const notes=document.getElementById('f_notes').value.trim();
+  let notesH=0, notesLines=[];
+  if(notes){ tmp.font='500 14px Arial'; notesLines=wrapText(tmp,notes,W-LB.pad*2-70); notesH = LB.clHdr + notesLines.length*LB.clLine + 6; }
+
+  const totalH = clBottom + notesH + LB.foot + 16;
+  if(measureOnly) return totalH;
+
+  // ===== actual drawing =====
+  g.save(); g.translate(x,y);
+  g.fillStyle='#fff'; g.fillRect(0,0,W,H);
+  g.strokeStyle='#f47b20'; g.lineWidth=3; g.strokeRect(8,8,W-16,H-16);
+  g.textAlign='left'; g.textBaseline='top';
+  g.fillStyle='#f47b20'; g.font='800 26px Arial'; g.fillText('LEGEND', LB.pad, 22);
+
+  const cols=4, colW=(W-LB.pad*2)/cols;
+  ['structure','treatment','evidence','conducive'].forEach((cat,ci)=>{
+    const cx=LB.pad+ci*colW; let cyy=LB.symTop;
+    g.fillStyle='#15181d'; g.font='800 16px Arial';
+    g.fillText(CAT_NAMES[cat].toUpperCase(), cx, cyy); cyy+=LB.catHdr;
+    Object.entries(STAMPS).filter(([k,s])=>s.cat===cat).forEach(([k,s])=>{
+      drawStampOn(g, cx+14, cyy+9, k, 24);
+      g.fillStyle='#374151'; g.font='600 14px Arial';
+      g.fillText(s.name, cx+34, cyy+1); cyy+=LB.rowH;
+    });
+  });
+
+  // checklists
+  g.strokeStyle='#e5e7eb'; g.lineWidth=1; g.beginPath(); g.moveTo(20,clTop-12); g.lineTo(W-20,clTop-12); g.stroke();
+  const checklist=(title,set,colIdx)=>{
+    const cx=LB.pad+colIdx*clColW, maxW=clColW-20;
+    g.fillStyle='#f47b20'; g.font='800 16px Arial'; g.fillText(title, cx, clTop);
+    let yy=clTop+LB.clHdr; const arr=[...set];
+    if(!arr.length){ g.fillStyle='#9ca3af'; g.font='500 14px Arial'; g.fillText('— none —', cx, yy); return; }
+    g.fillStyle='#374151'; g.font='500 14px Arial';
+    arr.forEach(it=>{ wrapText(g,'• '+it,maxW).forEach(L=>{ g.fillText(L,cx,yy); yy+=LB.clLine; }); });
+  };
+  checklist('FOUNDATION', selected.foundation, 0);
+  checklist('STRUCTURE / OTHER', selected.other, 1);
+  checklist('TREATMENT REC./PERFORMED', selected.treatment, 2);
+
+  // notes
+  if(notes){ const ny=clBottom+6;
+    g.fillStyle='#f47b20'; g.font='800 16px Arial'; g.fillText('NOTES', LB.pad, ny);
+    g.fillStyle='#374151'; g.font='500 14px Arial';
+    let yy=ny+LB.clHdr; notesLines.forEach(L=>{ g.fillText(L,LB.pad,yy); yy+=LB.clLine; }); }
+
+  // footer
+  g.fillStyle='#9aa4b2'; g.font='600 15px Arial'; g.textAlign='right';
+  g.fillText('Generated '+new Date().toLocaleString(), W-LB.pad, H-30);
+  g.restore();
+  return H;
+}
+function wrapText(g,t,maxW){ const words=t.split(' '); const lines=[]; let cur='';
+  words.forEach(w=>{ const test=cur?cur+' '+w:w; if(g.measureText(test).width>maxW){ if(cur)lines.push(cur); cur=w; } else cur=test; });
+  if(cur)lines.push(cur); return lines; }
+
+/* ---- Output helpers ---- */
+function fileBase(){
+  const a=(F('f_lastname')||F('f_address')||'termite-graph').replace(/[^\w]+/g,'_').slice(0,40);
+  const d=F('f_date')||new Date().toISOString().slice(0,10);
+  return `TermiteGraph_${a}_${d}`;
+}
+function canvasToBlob(canvas,type,q){ return new Promise(res=>canvas.toBlob(res,type,q)); }
+
+async function exportPhoto(){
+  exportModal.classList.remove('show');
+  const out=buildExportCanvas();
+  const blob=await canvasToBlob(out,'image/png');
+  const file=new File([blob],fileBase()+'.png',{type:'image/png'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:'Termite Graph'}); toast('Shared — choose “Save Image”.'); return; }catch(e){ if(e.name==='AbortError') return; }
+  }
+  downloadBlob(blob, file.name); toast('Image downloaded.');
+}
+async function exportPDF(forEmail){
+  exportModal.classList.remove('show');
+  const out=buildExportCanvas();
+  const jpeg=out.toDataURL('image/jpeg',0.92);
+  const pdfBlob=jpegToPdf(jpeg, out.width, out.height);
+  const file=new File([pdfBlob],fileBase()+'.pdf',{type:'application/pdf'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:'Termite Graph'+(forEmail?' (Email)':'')}); toast(forEmail?'Choose Mail to email the PDF.':'Choose “Save to Files”.'); return; }catch(e){ if(e.name==='AbortError') return; }
+  }
+  // fallback
+  downloadBlob(pdfBlob, file.name);
+  if(forEmail){
+    const subj=encodeURIComponent('Termite Graph — '+(F('f_address')||F('f_lastname')||''));
+    const body=encodeURIComponent('Termite graph attached.\n\nCompany: '+F('f_company')+'\nInspector: '+F('f_inspector')+'\nDate: '+F('f_date')+'\nAddress: '+F('f_address')+'\n\n(The PDF was downloaded — please attach it to this email.)');
+    setTimeout(()=>{ window.location.href=`mailto:?subject=${subj}&body=${body}`; }, 400);
+    toast('PDF downloaded — attach it to the email draft.');
+  } else toast('PDF downloaded.');
+}
+document.getElementById('expPhoto').onclick=exportPhoto;
+document.getElementById('expPdf').onclick=()=>exportPDF(false);
+document.getElementById('expEmail').onclick=()=>exportPDF(true);
+
+function downloadBlob(blob,name){ const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }
+
+/* Minimal JPEG-in-PDF writer (no libraries, works offline) */
+function jpegToPdf(dataURL, w, h){
+  const b64=dataURL.split(',')[1];
+  const bin=atob(b64); const len=bin.length;
+  const img=new Uint8Array(len); for(let i=0;i<len;i++) img[i]=bin.charCodeAt(i);
+  // Page sized to image aspect at 72dpi, fit to US Letter width
+  const pageW=612, pageH=Math.round(612*(h/w));
+  const enc=s=>{ const a=new Uint8Array(s.length); for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i); return a; };
+  const parts=[]; const offsets=[]; let pos=0;
+  const push=(u8)=>{ parts.push(u8); pos+=u8.length; };
+  const pushStr=(s)=>push(enc(s));
+  pushStr("%PDF-1.4\n");
+  const obj=(n,body)=>{ offsets[n]=pos; pushStr(n+" 0 obj\n"+body+"\nendobj\n"); };
+  obj(1,"<< /Type /Catalog /Pages 2 0 R >>");
+  obj(2,"<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  obj(3,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+  // image xobject
+  offsets[4]=pos;
+  pushStr(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.length} >>\nstream\n`);
+  push(img); pushStr("\nendstream\nendobj\n");
+  const content=`q\n${pageW} 0 0 ${pageH} 0 0 cm\n/Im0 Do\nQ`;
+  obj(5,`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  const xrefPos=pos;
+  let xref="xref\n0 6\n0000000000 65535 f \n";
+  for(let i=1;i<=5;i++){ xref+=String(offsets[i]).padStart(10,'0')+" 00000 n \n"; }
+  pushStr(xref);
+  pushStr(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`);
+  return new Blob(parts,{type:'application/pdf'});
+}
+
+/* ================= Toast ================= */
+let toastT;
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3200); }
+
+/* ================= Init ================= */
+render();
+fitZoom();
+setTimeout(fitZoom,100);
+</script>
+</body>
+</html>
